@@ -70,7 +70,7 @@ func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(res.StatusCode)
 		log.Println(err)
 		return
 	}
@@ -109,8 +109,8 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("prStatus: ", res.StatusCode)
+		w.WriteHeader(res.StatusCode)
+		log.Println(err)
 		return
 	}
 
@@ -187,8 +187,8 @@ func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(res.StatusCode)
+		w.WriteHeader(res.StatusCode)
+		log.Println(err)
 		return
 	}
 
@@ -235,6 +235,11 @@ func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
+	if res.StatusCode != http.StatusOK {
+		w.WriteHeader(res.StatusCode)
+		log.Println(err)
+		return
+	}
 	if _, err = io.Copy(w, res.Body); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println(err)
@@ -260,7 +265,7 @@ func (c *controller) Mehms(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(res.StatusCode)
 		log.Println(err)
 		return
 	}
@@ -289,7 +294,8 @@ func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		// error
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	user, err := Auth(r)
@@ -309,7 +315,7 @@ func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(res.StatusCode)
 		log.Println(err)
 		return
 	}
@@ -327,11 +333,14 @@ func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		// error
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	user, err := Auth(r)
 	if err != nil {
-		//handle
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms/"+id+"/like?userId="+user.Id, r.Body) // tbd
 	if err != nil {
@@ -347,7 +356,7 @@ func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(res.StatusCode)
 		log.Println(err)
 		return
 	}
@@ -368,6 +377,10 @@ func (c *controller) Add(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/add", r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -385,11 +398,13 @@ func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		// error
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	user, err := Auth(r)
 	if err != nil {
-		//handle
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	adminString := "false"
@@ -411,6 +426,12 @@ func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
+	if res.StatusCode != http.StatusOK {
+		w.WriteHeader(res.StatusCode)
+		log.Println(err)
+		return
+	}
+
 	if _, err = io.Copy(w, res.Body); err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		log.Println(err)
@@ -425,7 +446,8 @@ func (c *controller) GetComment(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		// error
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	pr, err := http.NewRequest("GET", mehmGateway+"/comments/get/"+id, r.Body)
