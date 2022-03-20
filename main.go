@@ -1,17 +1,15 @@
 package main
 
 import (
-	"github.com/gorilla/mux"
-	"github.com/nillga/api-gateway/controller"
-	"github.com/nillga/jwt-server/repository"
-	"github.com/nillga/jwt-server/service"
+	"log"
 	"net/http"
 	"os"
+
+	"github.com/gorilla/mux"
+	"github.com/nillga/api-gateway/controller"
 )
 
 var (
-	jwtRepo       repository.JwtRepository        = repository.NewPostgresRepo()
-	jwtService    service.JwtService              = service.NewJwtService(jwtRepo)
 	jwtController controller.ApiGatewayController = controller.NewApiGatewayController()
 )
 
@@ -25,11 +23,11 @@ func main() {
 	r.HandleFunc("/user", jwtController.GetUser)
 	r.HandleFunc("/mehms", jwtController.Mehms)
 	r.HandleFunc("/mehms/add", jwtController.Add)
-	r.HandleFunc("/mehms/remove", jwtController.Remove)
 	r.HandleFunc("/mehms/{id}", jwtController.SpecificMehm)
 	r.HandleFunc("/mehms/{id}/like", jwtController.LikeMehm)
-	r.HandleFunc("/comments/{id}", jwtController.GetComment)
+	r.HandleFunc("/mehms/{id}/remove", jwtController.Remove)
 	r.HandleFunc("/comments/new", jwtController.NewComment)
+	r.HandleFunc("/comments/get/{id}", jwtController.GetComment)
 
-	http.ListenAndServe(os.Getenv("PORT"), r)
+	log.Fatalln(http.ListenAndServe(os.Getenv("PORT"), r))
 }

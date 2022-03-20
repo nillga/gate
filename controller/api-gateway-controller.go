@@ -2,14 +2,16 @@ package controller
 
 import (
 	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
 	"github.com/gorilla/mux"
 	"github.com/nillga/api-gateway/cache"
 	"github.com/nillga/api-gateway/service"
 	"github.com/nillga/jwt-server/entity"
-	"io"
-	"net/http"
-	"os"
-	"time"
 )
 
 type UserGateway interface {
@@ -55,62 +57,88 @@ var (
 
 // gateway/user/signup
 func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
-	proxiedReq, err := http.NewRequest(r.Method, userGateway+"/signup", r.Body)
+	pr, err := http.NewRequest(r.Method, userGateway+"/signup", r.Body)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("Failed building redirect")
+		return
 	}
-	res, err := (&http.Client{}).Do(proxiedReq)
+	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	if res.StatusCode != http.StatusOK {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
-	cookie := res.Cookies()[0]
-	var user *entity.User
+	var user entity.User
 
-	if err := json.NewDecoder(res.Body).Decode(user); err != nil {
-		// manage
+	if err := json.NewDecoder(res.Body).Decode(&user); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+
+	cookie, err := gatewayService.BuildCooker(&user)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("cookie err")
+		return
 	}
 
 	http.SetCookie(w, cookie)
-	gatewayCache.Put(cookie.Value, user)
+	gatewayCache.Put(cookie.Value, &user)
 }
 
 // gateway/user/login
 func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
-	proxiedReq, err := http.NewRequest(r.Method, userGateway+"/login", r.Body)
+	pr, err := http.NewRequest(r.Method, userGateway+"/login", r.Body)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("pr: ", err)
+		return
 	}
-	res, err := (&http.Client{}).Do(proxiedReq)
+	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("prDone", err)
+		return
 	}
 	if res.StatusCode != http.StatusOK {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("prStatus: ", res.StatusCode)
+		return
 	}
 
-	// Login was successful
-	var signedIn entity.User
-	if err = json.NewDecoder(res.Body).Decode(&signedIn); err != nil {
-		// manage
+	var user entity.User
+
+	if err := json.NewDecoder(res.Body).Decode(&user); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("json decode ", err)
+		return
 	}
-	cooker, err := gatewayService.BuildCooker(&signedIn)
+
+	cookie, err := gatewayService.BuildCooker(&user)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("cookie err")
+		return
 	}
-
-	gatewayCache.Put(cooker.Value, &signedIn)
-	http.SetCookie(w, cooker)
+	http.SetCookie(w, cookie)
+	gatewayCache.Put(cookie.Value, &user)
 }
 
 // gateway/user/logout
 func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 	cooker, err := r.Cookie("jwt")
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
 	gatewayCache.Clear(cooker.Value)
@@ -129,32 +157,67 @@ func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 	user, err := Auth(r)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
-	var deleteId *entity.DeleteUserInput
-	if err = json.NewDecoder(r.Body).Decode(deleteId); err != nil {
-		// manage
+	var deleteId entity.DeleteUserInput
+	if err = json.NewDecoder(r.Body).Decode(&deleteId); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
 	if !user.Admin && user.Id != deleteId.Id {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("rights", err)
+		return
 	}
 
-	pr, err := http.NewRequest(r.Method, userGateway+"/delete", r.Body)
+	pr, err := http.NewRequest(r.Method, userGateway+"/delete?id="+deleteId.Id, r.Body)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	if res.StatusCode != http.StatusOK {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(res.StatusCode)
+		return
 	}
+
+	if user.Id != deleteId.Id {
+		return
+	}
+
+	cooker, err := r.Cookie("jwt")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+
+	gatewayCache.Clear(cooker.Value)
+
+	deadCookie := &http.Cookie{
+		Name:    "jwt",
+		Value:   "",
+		Expires: time.Now().Add(time.Hour * (-2)),
+		Path:    "/",
+	}
+
+	http.SetCookie(w, deadCookie)
 }
 
 // gateway/user
 func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	user, err := Auth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -163,15 +226,19 @@ func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
 	pr, err := http.NewRequest("GET", userGateway+"/resolve?id="+user.Id, r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
 		return
 	}
 	if _, err = io.Copy(w, res.Body); err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 }
 
@@ -180,20 +247,39 @@ func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
 // gateway/mehms
 func (c *controller) Mehms(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	proxiedReq, err := http.NewRequest(r.Method, mehmGateway+"/mehms?"+r.URL.Query().Encode(), r.Body)
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms?"+r.URL.Query().Encode(), r.Body)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
-	res, err := (&http.Client{}).Do(proxiedReq)
+	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	if res.StatusCode != http.StatusOK {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
+	for k, v := range res.Header {
+		log.Println(k, ":", v)
+	}
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	bodyString := string(bodyBytes)
+	log.Println(bodyString)
+
 	if _, err = io.Copy(w, res.Body); err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 }
 
@@ -205,24 +291,37 @@ func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// error
 	}
-	pr, err := http.NewRequest(r.Method, mehmGateway+"/"+id, r.Body)
+
+	user, err := Auth(r)
+	if err == nil {
+		id += "?userId="+user.Id
+	}
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms/get/"+id, r.Body)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	if res.StatusCode != http.StatusOK {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 }
 
-// gateway/mehms/{id}
+// gateway/mehms/{id}/like
 func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
@@ -234,20 +333,29 @@ func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		//handle
 	}
-	pr, err := http.NewRequest(r.Method, mehmGateway+"/"+id+"/like?userId="+user.Id, r.Body) // tbd
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms/"+id+"/like?userId="+user.Id, r.Body) // tbd
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
+	log.Println(pr.URL.RawPath)
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	if res.StatusCode != http.StatusOK {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 }
 
@@ -271,68 +379,48 @@ func (c *controller) Add(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// gateway/mehms/remove
+// gateway/mehms/{id}/remove
 func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
+	vars := mux.Vars(r)
+	id, ok := vars["id"]
+	if !ok {
+		// error
+	}
 	user, err := Auth(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+		//handle
 	}
+
+	adminString := "false"
 
 	if user.Admin {
-		pr, err := http.NewRequest("POST", mehmGateway+"/mehms/remove", r.Body)
-		res, err := (&http.Client{}).Do(pr)
-		if err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		if _, err = io.Copy(w, res.Body); err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		return
+		adminString = "true"
 	}
 
-	var id *map[string]string
-
-	if err = json.NewDecoder(r.Body).Decode(id); err != nil {
-		// manage
-	}
-
-	mr, err := http.NewRequest("GET", mehmGateway+"/mehms/"+(*id)["id"], r.Body)
-	if err != nil {
-		// manage
-	}
-	res, err := (&http.Client{}).Do(mr)
+	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/"+id+"/remove?userId="+user.Id+"&admin="+adminString, r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		log.Println(err)
 		return
 	}
-	if err = json.NewDecoder(res.Body).Decode(id); err != nil {
-		// manage
-	}
-	if user.Username != (*id)["authorName"] {
-		// manage
-	}
-
-	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/remove", r.Body)
-	res, err = (&http.Client{}).Do(pr)
+	pr.Header.Set("Content-Type", "application/json")
+	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		log.Println(err)
 		return
 	}
 	if _, err = io.Copy(w, res.Body); err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		log.Println(err)
 		return
 	}
-	return
 }
 
 // ---------------------
 
-// gateway/comments/{id}
+// gateway/comments/get/{id}
 func (c *controller) GetComment(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
@@ -340,43 +428,60 @@ func (c *controller) GetComment(w http.ResponseWriter, r *http.Request) {
 		// error
 	}
 
-	pr, err := http.NewRequest("GET", mehmGateway+"/comments/"+id, r.Body)
+	pr, err := http.NewRequest("GET", mehmGateway+"/comments/get/"+id, r.Body)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 }
 
 // gateway/comments/new
 func (c *controller) NewComment(w http.ResponseWriter, r *http.Request) {
+	log.Println("new comment!!")
 	params := r.URL.Query()
 	if !params.Has("comment") || !params.Has("mehmId") {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("oof")
+		return
 	}
 
 	user, err := Auth(r)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
-	pr, err := http.NewRequest("GET", mehmGateway+"/comments/new?"+r.URL.Query().Encode()+"&userId="+user.Id, r.Body)
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/new?"+r.URL.Query().Encode()+"&userId="+user.Id, r.Body)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		// manage
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
 }
 
