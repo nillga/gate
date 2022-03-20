@@ -12,6 +12,7 @@ import (
 	"github.com/nillga/api-gateway/cache"
 	"github.com/nillga/api-gateway/service"
 	"github.com/nillga/jwt-server/entity"
+	"github.com/nillga/jwt-server/errors"
 )
 
 type UserGateway interface {
@@ -55,12 +56,23 @@ var (
 	mehmGateway    = os.Getenv("MEHMS_HOST")
 )
 
-// gateway/user/signup
+// SignUp godoc
+// @Summary      Used to register a new user
+// @Description  Requires the user's credentials: namely their nickname, email and password
+// @Tags         user
+// @Accept       json
+// @Produce      json
+// @Param        input   body      entity.SignupInput  true  "Input data"
+// @Success      200  {object}  interface{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /user/signup [post]
 func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
+	_ = errors.ProceduralError{}
 	pr, err := http.NewRequest(r.Method, userGateway+"/signup", r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("Failed building redirect")
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
@@ -94,7 +106,18 @@ func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
 	gatewayCache.Put(cookie.Value, &user)
 }
 
-// gateway/user/login
+// Login godoc
+// @Summary      Used to login and receive a JWT
+// @Description  Identifier id can be email or username
+// @Tags         user
+// @Accept       json
+// @Produce      json
+// @Param        input   body      entity.LoginInput  true  "Input data"
+// @Success      200  {object}  interface{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /user/login [get]
 func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 	pr, err := http.NewRequest(r.Method, userGateway+"/login", r.Body)
 	if err != nil {
@@ -132,7 +155,17 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 	gatewayCache.Put(cookie.Value, &user)
 }
 
-// gateway/user/logout
+// Logout godoc
+// @Summary      Used to logout and remove a JWT
+// @Description  Identifier id can be email or username
+// @Tags         user
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  interface{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /user/logout [get]
 func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 	cooker, err := r.Cookie("jwt")
 	if err != nil {
@@ -153,7 +186,18 @@ func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, deadCookie)
 }
 
-// gateway/user/delete
+// Delete godoc
+// @Summary      Deletes a targeted User
+// @Description  Self-delete; admins can delete anybody
+// @Tags         user
+// @Accept       json
+// @Produce      json
+// @Param        input   body      entity.DeleteUserInput  true  "Input data"
+// @Success      200  {object}  interface{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /user/delete [delete]
 func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 	user, err := Auth(r)
 	if err != nil {
@@ -215,7 +259,17 @@ func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, deadCookie)
 }
 
-// gateway/user
+// GetUser godoc
+// @Summary      Receive Info about ones self
+// @Description  Password isnt cleared yet UwU
+// @Tags         user
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  entity.User{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /user [get]
 func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	user, err := Auth(r)
@@ -249,7 +303,19 @@ func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
 
 // ----------------------
 
-// gateway/mehms
+// GetMehms godoc
+// @Summary      Returns a page of mehms
+// @Description  Pagination can be handled via query params
+// @Tags         mehms
+// @Accept       json
+// @Produce      json
+// @Param        skip   query      int  false  "How many mehms will be skipped"
+// @Param        take   query      int  false  "How many mehms will be taken"
+// @Success      200  {object}  map[string]dto.MehmDTO{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /mehms [get]
 func (c *controller) Mehms(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms?"+r.URL.Query().Encode(), r.Body)
@@ -288,7 +354,18 @@ func (c *controller) Mehms(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// gateway/mehms/{id}
+// GetSpecificMehm godoc
+// @Summary      Returns a specified mehm
+// @Description  optionally showing info for privileged user
+// @Tags         mehms
+// @Accept       json
+// @Produce      json
+// @Param        id   path      int  true  "The ID of the requested mehm"
+// @Success      200  {object}  dto.MehmDTO{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /mehms/{id} [get]
 func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
@@ -300,7 +377,7 @@ func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 
 	user, err := Auth(r)
 	if err == nil {
-		id += "?userId="+user.Id
+		id += "?userId=" + user.Id
 	}
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms/get/"+id, r.Body)
 	if err != nil {
@@ -327,7 +404,18 @@ func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// gateway/mehms/{id}/like
+// LikeMehm godoc
+// @Summary      Used to like a specified mehm
+// @Description  optionally showing info for privileged user
+// @Tags         mehms
+// @Accept       json
+// @Produce      json
+// @Param        id   path      int  true  "The ID of the requested mehm"
+// @Success      200  {object}  interface{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /mehms/{id}/like [post]
 func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
@@ -368,7 +456,18 @@ func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// gateway/mehms/add
+// AddMehm godoc
+// @Summary      Uploads a specified mehm
+// @Description  optionally showing info for privileged user
+// @Tags         mehms
+// @Accept       x-www-form-urlencoded
+// @Produce      json
+// @Param        id   formData      int  true  "The ID of the requested mehm"
+// @Success      200  {object}  interface{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /mehms/add [post]
 func (c *controller) Add(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, err := Auth(r)
@@ -392,7 +491,18 @@ func (c *controller) Add(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// gateway/mehms/{id}/remove
+// RemoveMehm godoc
+// @Summary      Used to delete a specified mehm
+// @Description  optionally showing info for privileged user
+// @Tags         mehms
+// @Accept       json
+// @Produce      json
+// @Param        id   path      int  true  "The ID of the requested mehm"
+// @Success      200  {object}  interface{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /mehms/{id}/remove [post]
 func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
@@ -441,7 +551,18 @@ func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------
 
-// gateway/comments/get/{id}
+// GetComment godoc
+// @Summary      Used to show a specified comment
+// @Description  optionally showing info for privileged user
+// @Tags         comments
+// @Accept       json
+// @Produce      json
+// @Param        id   path      int  true  "The ID of the requested mehm"
+// @Success      200  {object}  dto.CommentDTO{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /comments/get/{id} [get]
 func (c *controller) GetComment(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
@@ -470,7 +591,19 @@ func (c *controller) GetComment(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// gateway/comments/new
+// AddComment godoc
+// @Summary      Used to add a new comment
+// @Description  optionally showing info for privileged user
+// @Tags         comments
+// @Accept       json
+// @Produce      json
+// @Param        comment   query      string  true  "The comment"
+// @Param        mehmId   query      int  true  "The mehm"
+// @Success      200  {object}  interface{}
+// @Failure      400  {object}  errors.ProceduralError
+// @Failure      404  {object}  errors.ProceduralError
+// @Failure      500  {object}  errors.ProceduralError
+// @Router       /comments/get/{id} [get]
 func (c *controller) NewComment(w http.ResponseWriter, r *http.Request) {
 	log.Println("new comment!!")
 	params := r.URL.Query()

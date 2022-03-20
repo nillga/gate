@@ -1,0 +1,453 @@
+basePath: /api/v1
+definitions:
+  dto.CommentDTO:
+    properties:
+      author:
+        type: string
+      dateTime:
+        type: string
+      id:
+        type: string
+    type: object
+  dto.MehmDTO:
+    properties:
+      authorName:
+        type: string
+      createdDate:
+        type: string
+      description:
+        type: string
+      genre:
+        type: integer
+      id:
+        type: integer
+      imageSource:
+        type: string
+      likes:
+        type: integer
+      title:
+        type: string
+    type: object
+  entity.DeleteUserInput:
+    properties:
+      id:
+        type: string
+    type: object
+  entity.LoginInput:
+    properties:
+      id:
+        type: string
+      password:
+        type: string
+    type: object
+  entity.SignupInput:
+    properties:
+      mail:
+        type: string
+      password:
+        type: string
+      repeated:
+        type: string
+      username:
+        type: string
+    type: object
+  entity.User:
+    properties:
+      _id:
+        type: string
+      admin:
+        type: boolean
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        items:
+          type: integer
+        type: array
+    type: object
+  errors.ProceduralError:
+    properties:
+      message:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is a sample server celler server.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Swagger Example API
+  version: "1.0"
+paths:
+  /comments/get/{id}:
+    get:
+      consumes:
+      - application/json
+      description: optionally showing info for privileged user
+      parameters:
+      - description: The comment
+        in: query
+        name: comment
+        required: true
+        type: string
+      - description: The mehm
+        in: query
+        name: mehmId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Used to add a new comment
+      tags:
+      - comments
+  /mehms:
+    get:
+      consumes:
+      - application/json
+      description: Pagination can be handled via query params
+      parameters:
+      - description: How many mehms will be skipped
+        in: query
+        name: skip
+        type: integer
+      - description: How many mehms will be taken
+        in: query
+        name: take
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/dto.MehmDTO'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Returns a page of mehms
+      tags:
+      - mehms
+  /mehms/{id}:
+    get:
+      consumes:
+      - application/json
+      description: optionally showing info for privileged user
+      parameters:
+      - description: The ID of the requested mehm
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.MehmDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Returns a specified mehm
+      tags:
+      - mehms
+  /mehms/{id}/like:
+    post:
+      consumes:
+      - application/json
+      description: optionally showing info for privileged user
+      parameters:
+      - description: The ID of the requested mehm
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Used to like a specified mehm
+      tags:
+      - mehms
+  /mehms/{id}/remove:
+    post:
+      consumes:
+      - application/json
+      description: optionally showing info for privileged user
+      parameters:
+      - description: The ID of the requested mehm
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Used to delete a specified mehm
+      tags:
+      - mehms
+  /mehms/add:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: optionally showing info for privileged user
+      parameters:
+      - description: The ID of the requested mehm
+        in: formData
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Uploads a specified mehm
+      tags:
+      - mehms
+  /user:
+    get:
+      consumes:
+      - application/json
+      description: Password isnt cleared yet UwU
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/entity.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Receive Info about ones self
+      tags:
+      - user
+  /user/delete:
+    delete:
+      consumes:
+      - application/json
+      description: Self-delete; admins can delete anybody
+      parameters:
+      - description: Input data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/entity.DeleteUserInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Deletes a targeted User
+      tags:
+      - user
+  /user/login:
+    get:
+      consumes:
+      - application/json
+      description: Identifier id can be email or username
+      parameters:
+      - description: Input data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/entity.LoginInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Used to login and receive a JWT
+      tags:
+      - user
+  /user/logout:
+    get:
+      consumes:
+      - application/json
+      description: Identifier id can be email or username
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Used to logout and remove a JWT
+      tags:
+      - user
+  /user/signup:
+    post:
+      consumes:
+      - application/json
+      description: 'Requires the user''s credentials: namely their nickname, email
+        and password'
+      parameters:
+      - description: Input data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/entity.SignupInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ProceduralError'
+      summary: Used to register a new user
+      tags:
+      - user
+swagger: "2.0"
