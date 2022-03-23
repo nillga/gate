@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/nillga/api-gateway/cache"
 	"github.com/nillga/api-gateway/service"
 	"github.com/nillga/jwt-server/entity"
 	"github.com/nillga/jwt-server/errors"
@@ -52,7 +51,6 @@ func NewApiGatewayController() ApiGatewayController {
 
 var (
 	gatewayService = service.NewService()
-	gatewayCache   = cache.NewCache()
 	userGateway    = os.Getenv("USERS_HOST")
 	mehmGateway    = os.Getenv("MEHMS_HOST")
 )
@@ -156,7 +154,7 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, cookie)
-	gatewayCache.Put(cookie.Value, &user)
+	gatewayService.Cache(cookie.Value, &user)
 }
 
 // Logout godoc
@@ -178,7 +176,7 @@ func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gatewayCache.Clear(cooker.Value)
+	gatewayService.UnCache(cooker.Value)
 
 	deadCookie := &http.Cookie{
 		Name:    "jwt",
@@ -203,7 +201,7 @@ func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  errors.ProceduralError
 // @Router       /user/delete [delete]
 func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
-	user, err := Auth(r)
+	user, err := gatewayService.Auth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println(err)
@@ -251,7 +249,7 @@ func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gatewayCache.Clear(cooker.Value)
+	gatewayService.UnCache(cooker.Value)
 
 	deadCookie := &http.Cookie{
 		Name:    "jwt",
@@ -276,7 +274,7 @@ func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 // @Router       /user [get]
 func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	user, err := Auth(r)
+	user, err := gatewayService.Auth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -379,7 +377,7 @@ func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := Auth(r)
+	user, err := gatewayService.Auth(r)
 	if err == nil {
 		id += "?userId=" + user.Id
 	}
@@ -428,7 +426,7 @@ func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	user, err := Auth(r)
+	user, err := gatewayService.Auth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println(err)
@@ -474,7 +472,7 @@ func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 // @Router       /mehms/add [post]
 func (c *controller) Add(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	user, err := Auth(r)
+	user, err := gatewayService.Auth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -516,7 +514,7 @@ func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	user, err := Auth(r)
+	user, err := gatewayService.Auth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -618,7 +616,7 @@ func (c *controller) NewComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := Auth(r)
+	user, err := gatewayService.Auth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println(err)
@@ -643,21 +641,4 @@ func (c *controller) NewComment(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-}
-
-// ---------------------
-
-func Auth(r *http.Request) (*entity.User, error) {
-	jwt, err := gatewayService.ReadBearer(r.Header.Get("Authorization"))
-
-	if user, inCache := gatewayCache.Get(jwt); inCache {
-		return user, nil
-	}
-
-	user, err := gatewayService.ReadToken(jwt)
-	if err != nil {
-		return nil, err
-	}
-	gatewayCache.Put(jwt, user)
-	return user, nil
 }
