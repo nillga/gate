@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -86,24 +87,6 @@ func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-
-	var user entity.User
-
-	if err := json.NewDecoder(res.Body).Decode(&user); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
-		return
-	}
-
-	cookie, err := gatewayService.BuildCooker(&user)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("cookie err")
-		return
-	}
-
-	http.SetCookie(w, cookie)
-	gatewayCache.Put(cookie.Value, &user)
 }
 
 // Login godoc
@@ -117,9 +100,25 @@ func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
 // @Failure      400  {object}  errors.ProceduralError
 // @Failure      404  {object}  errors.ProceduralError
 // @Failure      500  {object}  errors.ProceduralError
-// @Router       /user/login [get]
+// @Router       /user/login [post]
 func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
-	pr, err := http.NewRequest(r.Method, userGateway+"/login", r.Body)
+	params := r.URL.Query()
+	if !params.Has("id") || !params.Has("password") {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("oof")
+		return
+	}
+
+	li := entity.LoginInput{Identifier: params.Get("id"), Password: params.Get("password")}
+	bb := bytes.NewBuffer([]byte{})
+	if err := json.NewEncoder(bb).Encode(li); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("oof3")
+		return
+	}
+
+	pr, err := http.NewRequest(r.Method, userGateway+"/login", bb)
+	pr.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println("pr: ", err)
@@ -149,6 +148,11 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println("cookie err")
+		return
+	}
+	if err := json.NewEncoder(w).Encode(cookie); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("cookie 3err")
 		return
 	}
 	http.SetCookie(w, cookie)
@@ -340,12 +344,12 @@ func (c *controller) Mehms(w http.ResponseWriter, r *http.Request) {
 		log.Println(k, ":", v)
 	}
 
-	bodyBytes, err := io.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-	bodyString := string(bodyBytes)
-	log.Println(bodyString)
+	//	bodyBytes, err := io.ReadAll(res.Body)
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//	bodyString := string(bodyBytes)
+	//	log.Println(bodyString)
 
 	if _, err = io.Copy(w, res.Body); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -470,12 +474,13 @@ func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 // @Router       /mehms/add [post]
 func (c *controller) Add(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_, err := Auth(r)
+	user, err := Auth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/add", r.Body)
+	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/add?userId="+user.Id, r.Body)
+	pr.Header["Content-Type"] = r.Header["Content-Type"]
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -643,22 +648,16 @@ func (c *controller) NewComment(w http.ResponseWriter, r *http.Request) {
 // ---------------------
 
 func Auth(r *http.Request) (*entity.User, error) {
-	// do auth
-	cookie, err := r.Cookie("jwt")
-	if err != nil {
-		return nil, err
-	}
+	jwt, err := gatewayService.ReadBearer(r.Header.Get("Authorization"))
 
-	if user, inCache := gatewayCache.Get(cookie.Value); inCache {
-		// modify request
-		// ==> add req param id
+	if user, inCache := gatewayCache.Get(jwt); inCache {
 		return user, nil
 	}
 
-	user, err := gatewayService.ReadCooker(cookie)
+	user, err := gatewayService.ReadToken(jwt)
 	if err != nil {
 		return nil, err
 	}
-	gatewayCache.Put(cookie.Value, user)
+	gatewayCache.Put(jwt, user)
 	return user, nil
 }

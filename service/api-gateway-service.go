@@ -1,16 +1,20 @@
 package service
 
 import (
-	"github.com/dgrijalva/jwt-go"
-	"github.com/nillga/jwt-server/entity"
+	"errors"
 	"net/http"
 	"os"
+	"strings"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
+	"github.com/nillga/jwt-server/entity"
 )
 
 type GatewayService interface {
 	BuildCooker(user *entity.User) (*http.Cookie, error)
-	ReadCooker(cookie *http.Cookie) (*entity.User, error)
+	ReadBearer(authorizationHeader string) (string, error)
+	ReadToken(token string) (*entity.User, error)
 }
 
 type service struct{}
@@ -27,8 +31,8 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
-func (c *Claims) decodeJwt(cookie *http.Cookie) error {
-	if _, err := jwt.ParseWithClaims(cookie.Value, c, func(token *jwt.Token) (interface{}, error) {
+func (c *Claims) decodeJwt(token string) error {
+	if _, err := jwt.ParseWithClaims(token, c, func(token *jwt.Token) (interface{}, error) {
 		return []byte(secretKey), nil
 	}); err != nil {
 		return err
@@ -38,10 +42,10 @@ func (c *Claims) decodeJwt(cookie *http.Cookie) error {
 
 var secretKey = os.Getenv("SECRET_KEY")
 
-func (s *service) ReadCooker(cookie *http.Cookie) (*entity.User, error) {
+func (s *service) ReadToken(token string) (*entity.User, error) {
 	claims := &Claims{}
 
-	if err := claims.decodeJwt(cookie); err != nil {
+	if err := claims.decodeJwt(token); err != nil {
 		return nil, err
 	}
 
@@ -51,6 +55,23 @@ func (s *service) ReadCooker(cookie *http.Cookie) (*entity.User, error) {
 		Email:    claims.Mail,
 		Admin:    claims.IsAdmin,
 	}, nil
+}
+
+func (s *service) ReadBearer(authorizationHeader string) (string, error) {
+	if authorizationHeader == "" {
+		return "", errors.New("no auth provided")
+	}
+
+	authorizationParts := strings.Split(authorizationHeader, "Bearer")
+	if len(authorizationParts) != 2 {
+		return "", errors.New("invalid auth syntax")
+	}
+	token := strings.TrimSpace(authorizationParts[1])
+	if len(token) < 1 {
+		return "", errors.New("invalid token syntax")
+	}
+
+	return token, nil
 }
 
 func (s *service) BuildCooker(user *entity.User) (*http.Cookie, error) {
@@ -74,6 +95,6 @@ func (s *service) BuildCooker(user *entity.User) (*http.Cookie, error) {
 		Name:    "jwt",
 		Value:   tokenString,
 		Expires: time.Now().Add(time.Hour * 2),
-		Path:    "/",
+		HttpOnly: true,
 	}, nil
 }

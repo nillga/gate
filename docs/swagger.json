@@ -16,7 +16,7 @@
         "version": "1.0"
     },
     "host": "localhost:8080",
-    "basePath": "/api/v1",
+    "basePath": "/",
     "paths": {
         "/comments/get/{id}": {
             "get": {
@@ -427,7 +427,7 @@
             }
         },
         "/user/login": {
-            "get": {
+            "post": {
                 "description": "Identifier id can be email or username",
                 "consumes": [
                     "application/json"

@@ -5,15 +5,16 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-chi/chi"
 	"github.com/gorilla/mux"
 	"github.com/nillga/api-gateway/controller"
-	"github.com/go-chi/chi"
-	"github.com/swaggo/http-swagger"
-	_ "github.com/nillga/gate/docs"
+	_ "github.com/nillga/api-gateway/docs"
+	"github.com/rs/cors"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 var (
-	jwtController controller.ApiGatewayController = controller.NewApiGatewayController()
+	gatewayController controller.ApiGatewayController = controller.NewApiGatewayController()
 )
 
 // @title           Swagger Example API
@@ -29,7 +30,7 @@ var (
 // @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
 
 // @host      localhost:8080
-// @BasePath  /api/v1
+// @BasePath  /
 
 func main() {
 	cr := chi.NewRouter()
@@ -38,22 +39,30 @@ func main() {
 		httpSwagger.URL("http://localhost:1323/swagger/doc.json"), //The url pointing to API definition
 	))
 
-	go log.Fatalln(http.ListenAndServe(os.Getenv("SWAG"), cr))
-
 	r := mux.NewRouter()
 
-	r.HandleFunc("/user/signup", jwtController.SignUp)
-	r.HandleFunc("/user/login", jwtController.Login)
-	r.HandleFunc("/user/logout", jwtController.Logout)
-	r.HandleFunc("/user/delete", jwtController.Delete)
-	r.HandleFunc("/user", jwtController.GetUser)
-	r.HandleFunc("/mehms", jwtController.Mehms)
-	r.HandleFunc("/mehms/add", jwtController.Add)
-	r.HandleFunc("/mehms/{id}", jwtController.SpecificMehm)
-	r.HandleFunc("/mehms/{id}/like", jwtController.LikeMehm)
-	r.HandleFunc("/mehms/{id}/remove", jwtController.Remove)
-	r.HandleFunc("/comments/new", jwtController.NewComment)
-	r.HandleFunc("/comments/get/{id}", jwtController.GetComment)
+	r.HandleFunc("/user/signup", gatewayController.SignUp)
+	r.HandleFunc("/user/login", gatewayController.Login)
+	r.HandleFunc("/user/logout", gatewayController.Logout)
+	r.HandleFunc("/user/delete", gatewayController.Delete)
+	r.HandleFunc("/user", gatewayController.GetUser)
+	r.HandleFunc("/mehms", gatewayController.Mehms)
+	r.HandleFunc("/mehms/add", gatewayController.Add)
+	r.HandleFunc("/mehms/{id}", gatewayController.SpecificMehm)
+	r.HandleFunc("/mehms/{id}/like", gatewayController.LikeMehm)
+	r.HandleFunc("/mehms/{id}/remove", gatewayController.Remove)
+	r.HandleFunc("/comments/new", gatewayController.NewComment)
+	r.HandleFunc("/comments/get/{id}", gatewayController.GetComment)
 
-	log.Fatalln(http.ListenAndServe(os.Getenv("PORT"), r))
+	c := cors.New(cors.Options{
+		AllowedHeaders: []string{"Authorization", "Credentials", "Cookie"},
+	})
+	l := log.Logger{}
+	l.SetOutput(os.Stdout)
+	c.Log = &l
+
+	go func() {
+		log.Fatalln(http.ListenAndServe(os.Getenv("SWAG"), c.Handler(cr)))
+	}()
+	log.Fatalln(http.ListenAndServe(os.Getenv("PORT"), c.Handler(r)))
 }

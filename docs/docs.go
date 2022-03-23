@@ -434,7 +434,7 @@ const docTemplate = `{
             }
         },
         "/user/login": {
-            "get": {
+            "post": {
                 "description": "Identifier id can be email or username",
                 "consumes": [
                     "application/json"
@@ -697,7 +697,7 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
 	Host:             "localhost:8080",
-	BasePath:         "/api/v1",
+	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Swagger Example API",
 	Description:      "This is a sample server celler server.",

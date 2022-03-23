@@ -1,4 +1,4 @@
-basePath: /api/v1
+basePath: /
 definitions:
   dto.CommentDTO:
     properties:
@@ -355,7 +355,7 @@ paths:
       tags:
       - user
   /user/login:
-    get:
+    post:
       consumes:
       - application/json
       description: Identifier id can be email or username
