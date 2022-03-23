@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	gatewayController controller.ApiGatewayController = controller.NewApiGatewayController()
+	gatewayController controller.FrontendGatewayController = controller.NewApiGatewayController()
 )
 
 // @title           Swagger Example API
@@ -40,7 +40,9 @@ func main() {
 	))
 
 	r := mux.NewRouter()
-
+	
+	// frontend takes bearer logic with the generated full value cookie
+	// plan for API: bearer logic with reducable scope tokens --> security, somewhat
 	r.HandleFunc("/user/signup", gatewayController.SignUp)
 	r.HandleFunc("/user/login", gatewayController.Login)
 	r.HandleFunc("/user/logout", gatewayController.Logout)

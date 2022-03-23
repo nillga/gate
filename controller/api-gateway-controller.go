@@ -36,7 +36,7 @@ type CommentGateway interface {
 	NewComment(w http.ResponseWriter, r *http.Request)
 }
 
-type ApiGatewayController interface {
+type FrontendGatewayController interface {
 	UserGateway
 	MehmGateway
 	CommentGateway
@@ -45,7 +45,7 @@ type ApiGatewayController interface {
 type controller struct {
 }
 
-func NewApiGatewayController() ApiGatewayController {
+func NewApiGatewayController() FrontendGatewayController {
 	return &controller{}
 }
 
