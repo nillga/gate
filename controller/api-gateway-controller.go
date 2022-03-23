@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -11,8 +12,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nillga/api-gateway/service"
+	"github.com/nillga/api-gateway/utils"
 	"github.com/nillga/jwt-server/entity"
-	"github.com/nillga/jwt-server/errors"
 )
 
 type UserGateway interface {
@@ -68,22 +69,18 @@ var (
 // @Failure      500  {object}  errors.ProceduralError
 // @Router       /user/signup [post]
 func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
-	_ = errors.ProceduralError{}
 	pr, err := http.NewRequest(r.Method, userGateway+"/signup", r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		utils.InternalServerError(w, err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.BadGateway(w, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(res.StatusCode)
-		log.Println(err)
-		return
+		utils.WrongStatus(w, res)
 	}
 }
 
@@ -102,55 +99,47 @@ func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
 func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	if !params.Has("id") || !params.Has("password") {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("oof")
+		utils.BadRequest(w, fmt.Errorf("request requires query parameters id AND password"))
 		return
 	}
 
 	li := entity.LoginInput{Identifier: params.Get("id"), Password: params.Get("password")}
 	bb := bytes.NewBuffer([]byte{})
 	if err := json.NewEncoder(bb).Encode(li); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("oof3")
+		utils.InternalServerError(w, err)
 		return
 	}
 
 	pr, err := http.NewRequest(r.Method, userGateway+"/login", bb)
 	pr.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("pr: ", err)
+		utils.InternalServerError(w, err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("prDone", err)
+		utils.BadGateway(w, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(res.StatusCode)
-		log.Println(err)
+		utils.WrongStatus(w, res)
 		return
 	}
 
 	var user entity.User
 
 	if err := json.NewDecoder(res.Body).Decode(&user); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("json decode ", err)
+		utils.InternalServerError(w, err)
 		return
 	}
 
 	cookie, err := gatewayService.BuildCooker(&user)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("cookie err")
+		utils.InternalServerError(w, err)
 		return
 	}
 	if err := json.NewEncoder(w).Encode(cookie); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("cookie 3err")
+		utils.InternalServerError(w, err)
 		return
 	}
 	http.SetCookie(w, cookie)
@@ -171,8 +160,7 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 	cooker, err := r.Cookie("jwt")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.Unauthorized(w, err)
 		return
 	}
 
@@ -203,38 +191,32 @@ func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 	user, err := gatewayService.Auth(r)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.Unauthorized(w, err)
 		return
 	}
 	var deleteId entity.DeleteUserInput
 	if err = json.NewDecoder(r.Body).Decode(&deleteId); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.UnprocessableEntity(w, err)
 		return
 	}
 
 	if !user.Admin && user.Id != deleteId.Id {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("rights", err)
+		utils.Forbidden(w, err)
 		return
 	}
 
 	pr, err := http.NewRequest(r.Method, userGateway+"/delete?id="+deleteId.Id, r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.InternalServerError(w, err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.BadGateway(w, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(res.StatusCode)
-		log.Println(err)
+		utils.WrongStatus(w, res)
 		return
 	}
 
@@ -276,30 +258,25 @@ func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	user, err := gatewayService.Auth(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		utils.Unauthorized(w, err)
 		return
 	}
 	pr, err := http.NewRequest("GET", userGateway+"/resolve?id="+user.Id, r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.InternalServerError(w, err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.BadGateway(w, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(res.StatusCode)
-		log.Println(err)
+		utils.WrongStatus(w, res)
 		return
 	}
 	if _, err = io.Copy(w, res.Body); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
-		return
+		utils.InternalServerError(w, err)
 	}
 }
 
@@ -322,37 +299,21 @@ func (c *controller) Mehms(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms?"+r.URL.Query().Encode(), r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.InternalServerError(w, err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.BadGateway(w, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(res.StatusCode)
-		log.Println(err)
+		utils.WrongStatus(w, res)
 		return
 	}
-
-	for k, v := range res.Header {
-		log.Println(k, ":", v)
-	}
-
-	//	bodyBytes, err := io.ReadAll(res.Body)
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//	bodyString := string(bodyBytes)
-	//	log.Println(bodyString)
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
-		return
+		utils.InternalServerError(w, err)
 	}
 }
 
@@ -373,7 +334,7 @@ func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
+		utils.BadRequest(w, fmt.Errorf("mehm specification went wrong"))
 		return
 	}
 
@@ -383,26 +344,21 @@ func (c *controller) SpecificMehm(w http.ResponseWriter, r *http.Request) {
 	}
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms/get/"+id, r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.InternalServerError(w, err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.BadGateway(w, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(res.StatusCode)
-		log.Println(err)
+		utils.WrongStatus(w, res)
 		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
-		return
+		utils.InternalServerError(w, err)
 	}
 }
 
@@ -423,38 +379,32 @@ func (c *controller) LikeMehm(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
+		utils.BadRequest(w, fmt.Errorf("mehm specification went wrong"))
 		return
 	}
 	user, err := gatewayService.Auth(r)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.Unauthorized(w, err)
 		return
 	}
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms/"+id+"/like?userId="+user.Id, r.Body) // tbd
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.InternalServerError(w, err)
 		return
 	}
-	log.Println(pr.URL.RawPath)
+
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.BadGateway(w, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(res.StatusCode)
-		log.Println(err)
+		utils.WrongStatus(w, res)
 		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
-		return
+		utils.InternalServerError(w, err)
 	}
 }
 
@@ -474,23 +424,27 @@ func (c *controller) Add(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	user, err := gatewayService.Auth(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		utils.Unauthorized(w, err)
 		return
 	}
 	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/add?userId="+user.Id, r.Body)
-	pr.Header["Content-Type"] = r.Header["Content-Type"]
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		utils.InternalServerError(w, err)
 		return
 	}
+	pr.Header["Content-Type"] = r.Header["Content-Type"]
+
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		utils.BadGateway(w, err)
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		utils.WrongStatus(w, res)
 		return
 	}
 	if _, err = io.Copy(w, res.Body); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+		utils.InternalServerError(w, err)
 	}
 }
 
@@ -511,12 +465,12 @@ func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
+		utils.BadRequest(w, fmt.Errorf("mehm specification went wrong"))
 		return
 	}
 	user, err := gatewayService.Auth(r)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		utils.BadRequest(w, err)
 		return
 	}
 
@@ -528,27 +482,22 @@ func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 
 	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/"+id+"/remove?userId="+user.Id+"&admin="+adminString, r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		log.Println(err)
+		utils.InternalServerError(w, err)
 		return
 	}
 	pr.Header.Set("Content-Type", "application/json")
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		log.Println(err)
+		utils.BadGateway(w, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		w.WriteHeader(res.StatusCode)
-		log.Println(err)
+		utils.WrongStatus(w, res)
 		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		log.Println(err)
-		return
+		utils.InternalServerError(w, err)
 	}
 }
 
@@ -570,27 +519,27 @@ func (c *controller) GetComment(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
+		utils.BadRequest(w, fmt.Errorf("comment specification went wrong"))
 		return
 	}
 
 	pr, err := http.NewRequest("GET", mehmGateway+"/comments/get/"+id, r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.InternalServerError(w, err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.BadGateway(w, err)
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		utils.WrongStatus(w, res)
 		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
-		return
+		utils.InternalServerError(w, err)
 	}
 }
 
@@ -611,34 +560,32 @@ func (c *controller) NewComment(w http.ResponseWriter, r *http.Request) {
 	log.Println("new comment!!")
 	params := r.URL.Query()
 	if !params.Has("comment") || !params.Has("mehmId") {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("oof")
+		utils.BadRequest(w, fmt.Errorf("request query parameters must be comment AND mehmId"))
 		return
 	}
 
 	user, err := gatewayService.Auth(r)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.Unauthorized(w, err)
 		return
 	}
 
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/new?"+r.URL.Query().Encode()+"&userId="+user.Id, r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.InternalServerError(w, err)
 		return
 	}
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		utils.BadGateway(w, err)
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		utils.WrongStatus(w, res)
 		return
 	}
 
 	if _, err = io.Copy(w, res.Body); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
-		return
+		utils.InternalServerError(w, err)
 	}
 }
