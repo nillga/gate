@@ -15,6 +15,7 @@ import (
 type GatewayService interface {
 	Auth(r *http.Request) (*entity.User, error)
 	BuildCooker(user *entity.User) (*http.Cookie, error)
+	ReadBearer(authorizationHeader string) (string, error)
 	Cache(token string, user *entity.User)
 	UnCache(token string)
 }
@@ -63,7 +64,7 @@ func (s *service) BuildCooker(user *entity.User) (*http.Cookie, error) {
 }
 
 func (s *service) Auth(r *http.Request) (*entity.User, error) {
-	jwt, err := s.readBearer(r.Header.Get("Authorization"))
+	jwt, err := s.ReadBearer(r.Header.Get("Authorization"))
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func (s *service) readToken(token string) (*entity.User, error) {
 	}, nil
 }
 
-func (s *service) readBearer(authorizationHeader string) (string, error) {
+func (s *service) ReadBearer(authorizationHeader string) (string, error) {
 	if authorizationHeader == "" {
 		return "", errors.New("no auth provided")
 	}

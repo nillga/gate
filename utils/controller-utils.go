@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/nillga/jwt-server/errors"
 )
@@ -42,6 +43,19 @@ func WrongStatus(w http.ResponseWriter, r *http.Response) {
 	if _, err := io.Copy(w, r.Body); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println("Failed parsing error to JSON: initial error code: ", r.StatusCode)
+	}
+}
+
+func DeleteJwtCookie(w http.ResponseWriter) {
+	deadCookie := &http.Cookie{
+		Name:    "jwt",
+		Value:   "",
+		Expires: time.Now().Add(time.Hour * (-2)),
+		Path:    "/",
+	}
+
+	if err := json.NewEncoder(w).Encode(deadCookie); err != nil {
+		InternalServerError(w, err)
 	}
 }
 

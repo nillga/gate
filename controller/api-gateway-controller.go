@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -69,11 +68,13 @@ var (
 // @Failure      500  {object}  errors.ProceduralError
 // @Router       /user/signup [post]
 func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	pr, err := http.NewRequest(r.Method, userGateway+"/signup", r.Body)
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
 	}
+
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
 		utils.BadGateway(w, err)
@@ -97,25 +98,14 @@ func (c *controller) SignUp(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  errors.ProceduralError
 // @Router       /user/login [post]
 func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
-	params := r.URL.Query()
-	if !params.Has("id") || !params.Has("password") {
-		utils.BadRequest(w, fmt.Errorf("request requires query parameters id AND password"))
-		return
-	}
-
-	li := entity.LoginInput{Identifier: params.Get("id"), Password: params.Get("password")}
-	bb := bytes.NewBuffer([]byte{})
-	if err := json.NewEncoder(bb).Encode(li); err != nil {
-		utils.InternalServerError(w, err)
-		return
-	}
-
-	pr, err := http.NewRequest(r.Method, userGateway+"/login", bb)
+	w.Header().Set("Content-Type", "application/json")
+	pr, err := http.NewRequest(r.Method, userGateway+"/login", r.Body)
 	pr.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
 	}
+
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
 		utils.BadGateway(w, err)
@@ -127,7 +117,6 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user entity.User
-
 	if err := json.NewDecoder(res.Body).Decode(&user); err != nil {
 		utils.InternalServerError(w, err)
 		return
@@ -142,7 +131,6 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 		utils.InternalServerError(w, err)
 		return
 	}
-	http.SetCookie(w, cookie)
 	gatewayService.Cache(cookie.Value, &user)
 }
 
@@ -158,22 +146,16 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  errors.ProceduralError
 // @Router       /user/logout [get]
 func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
-	cooker, err := r.Cookie("jwt")
+	w.Header().Set("Content-Type", "application/json")
+	jwt, err := gatewayService.ReadBearer(r.Header.Get("Authorization"))
 	if err != nil {
 		utils.Unauthorized(w, err)
 		return
 	}
 
-	gatewayService.UnCache(cooker.Value)
+	gatewayService.UnCache(jwt)
 
-	deadCookie := &http.Cookie{
-		Name:    "jwt",
-		Value:   "",
-		Expires: time.Now().Add(time.Hour * (-2)),
-		Path:    "/",
-	}
-
-	http.SetCookie(w, deadCookie)
+	utils.DeleteJwtCookie(w)
 }
 
 // Delete godoc
@@ -189,6 +171,7 @@ func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  errors.ProceduralError
 // @Router       /user/delete [delete]
 func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	user, err := gatewayService.Auth(r)
 	if err != nil {
 		utils.Unauthorized(w, err)
@@ -220,27 +203,20 @@ func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.Id != deleteId.Id {
-		return
-	}
-
-	cooker, err := r.Cookie("jwt")
+	jwt, err := gatewayService.ReadBearer(r.Header.Get("Authorization"))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println(err)
 		return
 	}
 
-	gatewayService.UnCache(cooker.Value)
+	gatewayService.UnCache(jwt)
 
-	deadCookie := &http.Cookie{
-		Name:    "jwt",
-		Value:   "",
-		Expires: time.Now().Add(time.Hour * (-2)),
-		Path:    "/",
+	if user.Id != deleteId.Id {
+		return
 	}
 
-	http.SetCookie(w, deadCookie)
+	utils.DeleteJwtCookie(w)
 }
 
 // GetUser godoc
