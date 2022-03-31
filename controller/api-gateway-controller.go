@@ -1,14 +1,17 @@
 package controller
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/nillga/api-gateway/dto"
 	"github.com/nillga/api-gateway/service"
 	"github.com/nillga/api-gateway/utils"
 	"github.com/nillga/jwt-server/entity"
@@ -546,6 +549,117 @@ func (c *controller) NewComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/new?"+r.URL.Query().Encode()+"&userId="+user.Id, r.Body)
+	if err != nil {
+		utils.InternalServerError(w, err)
+		return
+	}
+	res, err := (&http.Client{}).Do(pr)
+	if err != nil {
+		utils.BadGateway(w, err)
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		utils.WrongStatus(w, res)
+		return
+	}
+
+	if _, err = io.Copy(w, res.Body); err != nil {
+		utils.InternalServerError(w, err)
+	}
+}
+
+func (c *controller) EditComment(w http.ResponseWriter, r *http.Request) {
+	user, err := gatewayService.Auth(r)
+	if err != nil {
+		utils.Unauthorized(w, err)
+		return
+	}
+
+	if !user.Admin {
+		utils.Forbidden(w, fmt.Errorf("not authorized"))
+		return
+	}
+
+	var input dto.CommentInput
+
+	if err = json.NewDecoder(r.Body).Decode(&input); err != nil {
+		utils.UnprocessableEntity(w, fmt.Errorf("format problems"))
+		return
+	}
+
+	if input.UserId, err = strconv.ParseInt(user.Id, 10, 64); err != nil {
+		utils.InternalServerError(w, fmt.Errorf("could not resolve user"))
+		return
+	}
+	input.Admin = user.Admin
+
+	body := bytes.NewBuffer([]byte{})
+
+	if err = json.NewEncoder(body).Encode(input); err != nil {
+		utils.InternalServerError(w, fmt.Errorf("failed repeating request"))
+		return
+	}
+
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/update", body)
+	if err != nil {
+		utils.InternalServerError(w, err)
+		return
+	}
+	res, err := (&http.Client{}).Do(pr)
+	if err != nil {
+		utils.BadGateway(w, err)
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		utils.WrongStatus(w, res)
+		return
+	}
+
+	if _, err = io.Copy(w, res.Body); err != nil {
+		utils.InternalServerError(w, err)
+	}
+}
+
+func (c *controller) EditMehm(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, ok := vars["id"]
+	if !ok {
+		utils.BadRequest(w, fmt.Errorf("mehm specification went wrong"))
+		return
+	}
+
+	user, err := gatewayService.Auth(r)
+	if err != nil {
+		utils.Unauthorized(w, err)
+		return
+	}
+
+	if !user.Admin {
+		utils.Forbidden(w, fmt.Errorf("not authorized"))
+		return
+	}
+
+	var input dto.MehmInput
+
+	if err = json.NewDecoder(r.Body).Decode(&input); err != nil {
+		utils.UnprocessableEntity(w, fmt.Errorf("format problems"))
+		return
+	}
+
+	if input.UserId, err = strconv.ParseInt(user.Id, 10, 64); err != nil {
+		utils.InternalServerError(w, fmt.Errorf("could not resolve user"))
+		return
+	}
+	input.Admin = user.Admin
+
+	body := bytes.NewBuffer([]byte{})
+
+	if err = json.NewEncoder(body).Encode(input); err != nil {
+		utils.InternalServerError(w, fmt.Errorf("failed repeating request"))
+		return
+	}
+
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/"+id+"/update", body)
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
