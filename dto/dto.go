@@ -1,6 +1,9 @@
 package dto
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 type Genre uint8
 
@@ -27,16 +30,20 @@ type CommentDTO struct {
 	DateTime time.Time `json:"dateTime"`
 }
 
+type LoggedIn struct {
+	http.Cookie `json:"jwt"`
+	Id          string `json:"id"`
+	Username    string `json:"username"`
+	Email       string `json:"email"`
+	Admin       bool   `json:"Admin"`
+}
+
 type CommentInput struct {
-	UserId  int64 `json:"userId"`
-	Id      int64  `json:"id"`
+	UserId  int64  `json:"userId"`
 	Comment string `json:"comment"`
-	Admin   bool   `json:"isAdmin"`
 }
 
 type MehmInput struct {
-	UserId      int64  `json:"userId"`
 	Description string `json:"description"`
 	Title       string `json:"title"`
-	Admin       bool   `json:"isAdmin"`
 }

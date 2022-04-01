@@ -129,7 +129,15 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 		utils.InternalServerError(w, err)
 		return
 	}
-	if err := json.NewEncoder(w).Encode(cookie); err != nil {
+
+	loggedIn := &dto.LoggedIn{
+		Cookie:   *cookie,
+		Id:       user.Id,
+		Username: user.Username,
+		Email:    user.Email,
+		Admin:    user.Admin,
+	}
+	if err := json.NewEncoder(w).Encode(loggedIn); err != nil {
 		utils.InternalServerError(w, err)
 	}
 }
@@ -581,11 +589,7 @@ func (c *controller) EditComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.UserId, err = strconv.ParseInt(user.Id, 10, 64); err != nil {
-		utils.InternalServerError(w, fmt.Errorf("could not resolve user"))
-		return
-	}
-	input.Admin = user.Admin
+	admin := strconv.FormatBool(user.Admin)
 
 	body := bytes.NewBuffer([]byte{})
 
@@ -594,7 +598,7 @@ func (c *controller) EditComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/update", body)
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/update?user="+user.Id+"&isAdmin="+admin, body)
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
@@ -640,11 +644,7 @@ func (c *controller) EditMehm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.UserId, err = strconv.ParseInt(user.Id, 10, 64); err != nil {
-		utils.InternalServerError(w, fmt.Errorf("could not resolve user"))
-		return
-	}
-	input.Admin = user.Admin
+	admin := strconv.FormatBool(user.Admin)
 
 	body := bytes.NewBuffer([]byte{})
 
@@ -653,7 +653,7 @@ func (c *controller) EditMehm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pr, err := http.NewRequest(r.Method, mehmGateway+"/"+id+"/update", body)
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/"+id+"/update?user="+user.Id+"&isAdmin="+admin, body)
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
