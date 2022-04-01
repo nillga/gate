@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
-	"github.com/nillga/api-gateway/cache"
 	"github.com/nillga/jwt-server/entity"
 )
 
@@ -16,8 +15,6 @@ type GatewayService interface {
 	Auth(r *http.Request) (*entity.User, error)
 	BuildCooker(user *entity.User) (*http.Cookie, error)
 	ReadBearer(authorizationHeader string) (string, error)
-	Cache(token string, user *entity.User)
-	UnCache(token string)
 }
 
 type service struct{}
@@ -33,10 +30,6 @@ type Claims struct {
 	IsAdmin  bool   `json:"admin"`
 	jwt.StandardClaims
 }
-
-var (
-	gatewayCache = cache.NewCache()
-)
 
 func (s *service) BuildCooker(user *entity.User) (*http.Cookie, error) {
 	claims := &Claims{
@@ -69,24 +62,11 @@ func (s *service) Auth(r *http.Request) (*entity.User, error) {
 		return nil, err
 	}
 
-	if user, inCache := gatewayCache.Get(jwt); inCache {
-		return user, nil
-	}
-
 	user, err := s.readToken(jwt)
 	if err != nil {
 		return nil, err
 	}
-	gatewayCache.Put(jwt, user)
 	return user, nil
-}
-
-func (s *service) Cache(token string, user *entity.User) {
-	gatewayCache.Put(token, user)
-}
-
-func (s *service) UnCache(token string) {
-	gatewayCache.Clear(token)
 }
 
 func (c *Claims) decodeJwt(token string) error {

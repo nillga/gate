@@ -131,9 +131,7 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewEncoder(w).Encode(cookie); err != nil {
 		utils.InternalServerError(w, err)
-		return
 	}
-	gatewayService.Cache(cookie.Value, &user)
 }
 
 // Logout godoc
@@ -149,13 +147,11 @@ func (c *controller) Login(w http.ResponseWriter, r *http.Request) {
 // @Router       /user/logout [get]
 func (c *controller) Logout(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	jwt, err := gatewayService.ReadBearer(r.Header.Get("Authorization"))
+	_, err := gatewayService.ReadBearer(r.Header.Get("Authorization"))
 	if err != nil {
 		utils.Unauthorized(w, err)
 		return
 	}
-
-	gatewayService.UnCache(jwt)
 
 	utils.DeleteJwtCookie(w)
 }
@@ -205,14 +201,12 @@ func (c *controller) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jwt, err := gatewayService.ReadBearer(r.Header.Get("Authorization"))
+	_, err = gatewayService.ReadBearer(r.Header.Get("Authorization"))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println(err)
 		return
 	}
-
-	gatewayService.UnCache(jwt)
 
 	if user.Id != deleteId.Id {
 		return
