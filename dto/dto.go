@@ -39,11 +39,16 @@ type LoggedIn struct {
 }
 
 type CommentInput struct {
-	UserId  int64  `json:"userId"`
-	Comment string `json:"comment"`
+	MehmID  int64  `json:"id"`
+	Comment string `json:"text"`
 }
 
 type MehmInput struct {
 	Description string `json:"description"`
 	Title       string `json:"title"`
+}
+
+type Comment struct {
+	MehmId  int64  `json:"mehmId"`
+	Comment string `json:"comment"`
 }

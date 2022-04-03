@@ -30,12 +30,15 @@ type MehmGateway interface {
 	Add(w http.ResponseWriter, r *http.Request)
 	Remove(w http.ResponseWriter, r *http.Request)
 	LikeMehm(w http.ResponseWriter, r *http.Request)
+	EditMehm(w http.ResponseWriter, r *http.Request)
 	SpecificMehm(w http.ResponseWriter, r *http.Request)
 }
 
 type CommentGateway interface {
 	GetComment(w http.ResponseWriter, r *http.Request)
 	NewComment(w http.ResponseWriter, r *http.Request)
+	EditComment(w http.ResponseWriter, r *http.Request)
+	DeleteComment(w http.ResponseWriter, r *http.Request)
 }
 
 type FrontendGatewayController interface {
@@ -277,6 +280,11 @@ func (c *controller) GetUser(w http.ResponseWriter, r *http.Request) {
 // @Router       /mehms [get]
 func (c *controller) Mehms(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Query().Get("genre") != "" && r.URL.Query().Get("genre") != "PROGRAMMING" && r.URL.Query().Get("genre") != "DHBW" && r.URL.Query().Get("genre") != "OTHER" {
+		utils.BadRequest(w, fmt.Errorf("invalid genre %s", r.URL.Query().Get("genre")))
+		return
+	}
+
 	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms?"+r.URL.Query().Encode(), r.Body)
 	if err != nil {
 		utils.InternalServerError(w, err)
@@ -460,7 +468,7 @@ func (c *controller) Remove(w http.ResponseWriter, r *http.Request) {
 		adminString = "true"
 	}
 
-	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/"+id+"/remove?userId="+user.Id+"&admin="+adminString, r.Body)
+	pr, err := http.NewRequest("POST", mehmGateway+"/mehms/"+id+"/remove?userId="+user.Id+"&isAdmin="+adminString, r.Body)
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
@@ -537,24 +545,38 @@ func (c *controller) GetComment(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  errors.ProceduralError
 // @Router       /comments/get/{id} [get]
 func (c *controller) NewComment(w http.ResponseWriter, r *http.Request) {
-	log.Println("new comment!!")
-	params := r.URL.Query()
-	if !params.Has("comment") || !params.Has("mehmId") {
-		utils.BadRequest(w, fmt.Errorf("request query parameters must be comment AND mehmId"))
-		return
-	}
-
+	w.Header().Add("Content-Type", "application/json")
 	user, err := gatewayService.Auth(r)
 	if err != nil {
 		utils.Unauthorized(w, err)
 		return
 	}
 
-	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/new?"+r.URL.Query().Encode()+"&userId="+user.Id, r.Body)
+	var comment dto.Comment
+	if err = json.NewDecoder(r.Body).Decode(&comment); err != nil {
+		utils.BadRequest(w, err)
+		return
+	}
+	if comment.MehmId < 1 {
+		utils.NotFound(w, fmt.Errorf("index %d does not exist", comment.MehmId))
+	}
+	if comment.Comment == "" || len(comment.Comment) > 256 {
+		utils.UnprocessableEntity(w, fmt.Errorf("comment must be 1-256 signs"))
+	}
+
+	body := bytes.NewBuffer([]byte{})
+
+	if err = json.NewEncoder(body).Encode(comment); err != nil {
+		utils.InternalServerError(w, fmt.Errorf("failed repeating request"))
+		return
+	}
+
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/new?userId="+user.Id, body)
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
 	}
+	pr.Header.Add("Content-Type", "application/json")
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
 		utils.BadGateway(w, err)
@@ -577,11 +599,6 @@ func (c *controller) EditComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !user.Admin {
-		utils.Forbidden(w, fmt.Errorf("not authorized"))
-		return
-	}
-
 	var input dto.CommentInput
 
 	if err = json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -598,11 +615,46 @@ func (c *controller) EditComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/update?user="+user.Id+"&isAdmin="+admin, body)
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/update?userId="+user.Id+"&isAdmin="+admin, body)
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
 	}
+	pr.Header.Add("Content-Type", "application/json")
+	res, err := (&http.Client{}).Do(pr)
+	if err != nil {
+		utils.BadGateway(w, err)
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		utils.WrongStatus(w, res)
+		return
+	}
+
+	if _, err = io.Copy(w, res.Body); err != nil {
+		utils.InternalServerError(w, err)
+	}
+}
+
+func (c *controller) DeleteComment(w http.ResponseWriter, r *http.Request) {
+	user, err := gatewayService.Auth(r)
+	if err != nil {
+		utils.Unauthorized(w, err)
+		return
+	}
+
+	if id, err := strconv.Atoi(r.URL.Query().Get("commentId")); err != nil || id < 1 {
+		utils.BadRequest(w, fmt.Errorf("invalid comment ID %s", r.URL.Query().Get("commentId")))
+	}
+
+	admin := strconv.FormatBool(user.Admin)
+
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/comments/remove?commentId="+r.URL.Query().Get("commentId")+"&userId="+user.Id+"&isAdmin="+admin, r.Body)
+	if err != nil {
+		utils.InternalServerError(w, err)
+		return
+	}
+	pr.Header.Add("Content-Type", "application/json")
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
 		utils.BadGateway(w, err)
@@ -619,31 +671,28 @@ func (c *controller) EditComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *controller) EditMehm(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
 		utils.BadRequest(w, fmt.Errorf("mehm specification went wrong"))
 		return
 	}
-
 	user, err := gatewayService.Auth(r)
 	if err != nil {
 		utils.Unauthorized(w, err)
 		return
 	}
-
 	if !user.Admin {
 		utils.Forbidden(w, fmt.Errorf("not authorized"))
 		return
 	}
-
 	var input dto.MehmInput
 
 	if err = json.NewDecoder(r.Body).Decode(&input); err != nil {
 		utils.UnprocessableEntity(w, fmt.Errorf("format problems"))
 		return
 	}
-
 	admin := strconv.FormatBool(user.Admin)
 
 	body := bytes.NewBuffer([]byte{})
@@ -652,12 +701,12 @@ func (c *controller) EditMehm(w http.ResponseWriter, r *http.Request) {
 		utils.InternalServerError(w, fmt.Errorf("failed repeating request"))
 		return
 	}
-
-	pr, err := http.NewRequest(r.Method, mehmGateway+"/"+id+"/update?user="+user.Id+"&isAdmin="+admin, body)
+	pr, err := http.NewRequest(r.Method, mehmGateway+"/mehms/"+id+"/update?userId="+user.Id+"&isAdmin="+admin, body)
 	if err != nil {
 		utils.InternalServerError(w, err)
 		return
 	}
+	pr.Header.Add("Content-Type", "application/json")
 	res, err := (&http.Client{}).Do(pr)
 	if err != nil {
 		utils.BadGateway(w, err)
@@ -667,7 +716,6 @@ func (c *controller) EditMehm(w http.ResponseWriter, r *http.Request) {
 		utils.WrongStatus(w, res)
 		return
 	}
-
 	if _, err = io.Copy(w, res.Body); err != nil {
 		utils.InternalServerError(w, err)
 	}

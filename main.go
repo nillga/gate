@@ -53,8 +53,11 @@ func main() {
 	r.HandleFunc("/mehms/{id}", gatewayController.SpecificMehm)
 	r.HandleFunc("/mehms/{id}/like", gatewayController.LikeMehm)
 	r.HandleFunc("/mehms/{id}/remove", gatewayController.Remove)
+	r.HandleFunc("/mehms/{id}/update", gatewayController.EditMehm)
 	r.HandleFunc("/comments/new", gatewayController.NewComment)
 	r.HandleFunc("/comments/get/{id}", gatewayController.GetComment)
+	r.HandleFunc("/comments/update", gatewayController.EditComment)
+	r.HandleFunc("/comments/remove", gatewayController.DeleteComment)
 
 	c := cors.New(cors.Options{
 		AllowedHeaders: []string{"Authorization", "Credentials", "Cookie"},
